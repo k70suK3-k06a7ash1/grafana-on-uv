@@ -14,7 +14,7 @@ from .operations import (
     list_dashboards,
     list_datasources,
 )
-from .types import GrafanaResult
+from .types import GrafanaResult, WorkflowResult
 
 
 def health_check_workflow(client: GrafanaApi) -> GrafanaResult[dict]:
@@ -44,7 +44,7 @@ def dashboard_workflow(
 def full_workflow(
     client: GrafanaApi,
     dashboard_preset: str = "simple",
-) -> list[tuple[str, GrafanaResult]]:
+) -> WorkflowResult:
     """全ワークフローを実行."""
     dashboard_fn = DASHBOARD_PRESETS.get(dashboard_preset, DASHBOARD_PRESETS["simple"])
 

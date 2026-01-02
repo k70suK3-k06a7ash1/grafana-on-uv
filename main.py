@@ -7,20 +7,20 @@ from returns.io import IO, IOFailure, IOSuccess, impure_safe
 from src.grafana_on_uv.client import create_client
 from src.grafana_on_uv.combinators import format_result
 from src.grafana_on_uv.data import DASHBOARD_PRESETS
-from src.grafana_on_uv.types import GrafanaResult
+from src.grafana_on_uv.types import GrafanaIO, WorkflowResult
 from src.grafana_on_uv.workflows import full_workflow
 
 PRESETS = list(DASHBOARD_PRESETS.keys())
 
 
 @impure_safe
-def run_workflows(preset: str) -> list[tuple[str, GrafanaResult]]:
+def run_workflows(preset: str) -> WorkflowResult:
     """ワークフローを実行 (副作用をIOでラップ)."""
     client = create_client()
     return full_workflow(client, dashboard_preset=preset)
 
 
-def print_results(results: list[tuple[str, GrafanaResult]]) -> IO[None]:
+def print_results(results: WorkflowResult) -> IO[None]:
     """結果を出力."""
     def _print() -> None:
         print("=== Grafana Client (Monadic) ===\n")
@@ -36,6 +36,11 @@ def print_usage() -> None:
     print(f"\nPresets: {', '.join(PRESETS)}")
 
 
+def run(preset: str) -> GrafanaIO[WorkflowResult]:
+    """メインワークフローを実行."""
+    return run_workflows(preset)
+
+
 def main() -> None:
     """エントリーポイント."""
     preset = sys.argv[1] if len(sys.argv) > 1 else "simple"
@@ -45,7 +50,7 @@ def main() -> None:
         print_usage()
         sys.exit(1)
 
-    match run_workflows(preset):
+    match run(preset):
         case IOSuccess(results):
             print_results(results)._inner_value()
         case IOFailure(error):

@@ -1,6 +1,6 @@
 """Sample data definitions."""
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import Enum
 
 
@@ -36,21 +36,18 @@ class PanelType(Enum):
 # =============================================================================
 
 
-@dataclass
+@dataclass(frozen=True)
 class GridPos:
-    """パネル位置."""
+    """パネル位置 (イミュータブル)."""
 
     x: int
     y: int
     w: int
     h: int
 
-    def to_dict(self) -> dict:
-        return {"x": self.x, "y": self.y, "w": self.w, "h": self.h}
-
 
 def panel(
-    id: int,
+    panel_id: int,
     title: str,
     panel_type: PanelType,
     grid_pos: GridPos,
@@ -58,10 +55,10 @@ def panel(
 ) -> dict:
     """パネルを生成."""
     return {
-        "id": id,
+        "id": panel_id,
         "title": title,
         "type": panel_type.value,
-        "gridPos": grid_pos.to_dict(),
+        "gridPos": asdict(grid_pos),
         "datasource": {"type": "testdata", "uid": "testdata"},
         "targets": [{"refId": "A", "scenarioId": scenario_id.value}],
     }
@@ -102,10 +99,6 @@ def loki_datasource(url: str = "http://loki:3100") -> dict:
         "url": url,
         "isDefault": False,
     }
-
-
-# デフォルトエイリアス
-sample_datasource = testdata_datasource
 
 
 # =============================================================================
@@ -189,10 +182,6 @@ def overview_dashboard() -> dict:
     )
 
 
-# デフォルトエイリアス
-sample_dashboard = simple_dashboard
-
-
 # =============================================================================
 # Presets
 # =============================================================================
@@ -200,8 +189,8 @@ sample_dashboard = simple_dashboard
 
 DATASOURCE_PRESETS = {
     "testdata": testdata_datasource,
-    "prometheus": prometheus_datasource,
-    "loki": loki_datasource,
+    "prometheus": lambda: prometheus_datasource(),
+    "loki": lambda: loki_datasource(),
 }
 
 DASHBOARD_PRESETS = {

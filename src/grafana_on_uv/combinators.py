@@ -2,7 +2,6 @@
 
 from typing import Callable
 
-from returns.io import IO
 from returns.result import Failure, Success
 
 from .types import GrafanaResult
@@ -26,8 +25,3 @@ def format_result[T](label: str) -> Callable[[GrafanaResult[T]], str]:
             case Failure(error):
                 return f"[{label}] Failure: {error}"
     return formatter
-
-
-def log(message: str) -> IO[None]:
-    """ログ出力 (IO monad)."""
-    return IO(lambda: print(message))
