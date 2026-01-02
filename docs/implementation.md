@@ -30,7 +30,7 @@ grafana-on-uv/
     ├── types.py            # 型定義
     ├── client.py           # クライアントファクトリ
     ├── operations.py       # API操作
-    ├── data.py             # サンプルデータ
+    ├── data.py             # サンプルデータ・プリセット
     ├── combinators.py      # 合成関数
     └── workflows.py        # ワークフロー
 ```
@@ -41,7 +41,7 @@ grafana-on-uv/
 ┌─────────────────────────────────────────────┐
 │  Presentation Layer (main.py)               │
 │  - IO モナドで副作用を管理                    │
-│  - エントリーポイント                         │
+│  - CLI引数でプリセット選択                    │
 └─────────────────────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────────┐
@@ -53,7 +53,7 @@ grafana-on-uv/
 ┌─────────────────────────────────────────────┐
 │  Domain Layer                               │
 │  - operations.py: API 操作 (@safe)          │
-│  - data.py: ドメインデータ                   │
+│  - data.py: プリセット・ビルダー             │
 │  - types.py: 型エイリアス                    │
 └─────────────────────────────────────────────┘
                     ↓
@@ -140,10 +140,48 @@ Grafana API操作を純粋関数として定義。`@safe` デコレータで例�
 
 ### data.py
 
-サンプルデータの定義。
+サンプルデータとプリセットの定義。
 
-- `sample_datasource()`: TestData データソース
-- `sample_dashboard()`: Random Walk パネル付きダッシュボード
+#### Enums
+
+| Enum | 説明 |
+|------|------|
+| `ScenarioId` | TestData シナリオ (RANDOM_WALK, LOGS, etc.) |
+| `PanelType` | パネルタイプ (TIMESERIES, STAT, GAUGE, etc.) |
+
+#### Builders
+
+```python
+# パネルビルダー
+panel(id, title, PanelType.STAT, GridPos(0, 0, 6, 4))
+
+# ダッシュボードビルダー
+dashboard("Title", panels=[...], tags=["tag"])
+```
+
+#### DataSource Presets
+
+| 関数 | 説明 |
+|------|------|
+| `testdata_datasource()` | TestData (デフォルト) |
+| `prometheus_datasource()` | Prometheus |
+| `loki_datasource()` | Loki |
+
+#### Dashboard Presets
+
+| 関数 | パネル数 | 説明 |
+|------|---------|------|
+| `simple_dashboard()` | 1 | シンプル (Timeseries) |
+| `metrics_dashboard()` | 4 | メトリクス (Stat, Gauge, Bar) |
+| `logs_dashboard()` | 1 | ログ表示 |
+| `overview_dashboard()` | 6 | オーバービュー |
+
+#### Preset辞書
+
+```python
+DATASOURCE_PRESETS = {"testdata", "prometheus", "loki"}
+DASHBOARD_PRESETS = {"simple", "metrics", "logs", "overview"}
+```
 
 ### combinators.py
 
@@ -159,38 +197,75 @@ Result を変換する合成関数。
 
 ビジネスワークフローを定義。
 
-| 関数 | 説明 |
-|------|------|
-| `health_check_workflow` | ヘルスチェック |
-| `datasource_workflow` | データソース作成 (重複ハンドリング付き) |
-| `dashboard_workflow` | ダッシュボード作成 |
-| `full_workflow` | 全ワークフロー実行 |
+| 関数 | 引数 | 説明 |
+|------|------|------|
+| `health_check_workflow` | client | ヘルスチェック |
+| `datasource_workflow` | client, datasource_fn | データソース作成 |
+| `dashboard_workflow` | client, dashboard_fn | ダッシュボード作成 |
+| `full_workflow` | client, dashboard_preset | 全ワークフロー実行 |
 
 ### main.py
 
-エントリーポイント。`@impure_safe` で副作用を `IOResult` にラップ。
+エントリーポイント。CLI引数でプリセットを選択。
+
+```python
+# 使用方法
+python main.py [preset]
+
+# preset: simple, metrics, logs, overview
+```
 
 ```python
 @impure_safe
-def run_workflows() -> list[tuple[str, GrafanaResult]]:
+def run_workflows(preset: str) -> list[tuple[str, GrafanaResult]]:
     client = create_client()
-    return full_workflow(client)
+    return full_workflow(client, dashboard_preset=preset)
 ```
 
-## 実行方法
+## 実行フロー
 
+```
+main.py [preset]
+    ↓
+run_workflows(preset)           # IOResult でラップ
+    ↓
+full_workflow(client, preset)   # ワークフロー実行
+    ↓
+DASHBOARD_PRESETS[preset]()     # ここで初めてデータ生成
+    ↓
+create_dashboard(client, data)  # Grafana API 呼び出し
+```
+
+## Make コマンド
+
+### Setup
 ```bash
-# Grafana 起動
-make up
+make setup        # 依存関係インストール
+```
 
-# サンプル実行
-make run
+### Docker
+```bash
+make up           # Grafana 起動
+make down         # Grafana 停止
+make restart      # Grafana 再起動
+make logs         # ログ表示
+make ps           # コンテナ状態
+```
 
-# ログ確認
-make logs
+### App
+```bash
+make run          # デフォルト (simple)
+make run-simple   # Simple dashboard
+make run-metrics  # Metrics dashboard
+make run-logs     # Logs dashboard
+make run-overview # Overview dashboard
+make run-all      # 全プリセット実行
+make open         # ブラウザで開く
+```
 
-# 停止
-make down
+### Cleanup
+```bash
+make clean        # ボリューム・キャッシュ削除
 ```
 
 ## 出力例
@@ -202,7 +277,7 @@ make down
 [DataSources] Success: []
 [Create DataSource] Success: {'datasource': {...}, 'id': 1, 'name': 'TestData'}
 [Dashboards] Success: []
-[Create Dashboard] Success: {'id': 1, 'slug': 'sample-dashboard', ...}
+[Create Dashboard (overview)] Success: {'id': 1, 'slug': 'overview-dashboard', ...}
 
 === Done ===
 ```

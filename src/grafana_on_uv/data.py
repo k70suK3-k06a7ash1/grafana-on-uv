@@ -1,8 +1,79 @@
 """Sample data definitions."""
 
+from dataclasses import dataclass
+from enum import Enum
 
-def sample_datasource() -> dict:
-    """サンプルデータソース定義."""
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+
+class ScenarioId(Enum):
+    """TestData シナリオ."""
+
+    RANDOM_WALK = "random_walk"
+    PREDICTABLE_PULSE = "predictable_pulse"
+    CSV_CONTENT = "csv_content"
+    LOGS = "logs"
+    STREAMING_CLIENT = "streaming_client"
+
+
+class PanelType(Enum):
+    """パネルタイプ."""
+
+    TIMESERIES = "timeseries"
+    STAT = "stat"
+    GAUGE = "gauge"
+    TABLE = "table"
+    LOGS = "logs"
+    BARCHART = "barchart"
+    PIECHART = "piechart"
+
+
+# =============================================================================
+# Panel Builders
+# =============================================================================
+
+
+@dataclass
+class GridPos:
+    """パネル位置."""
+
+    x: int
+    y: int
+    w: int
+    h: int
+
+    def to_dict(self) -> dict:
+        return {"x": self.x, "y": self.y, "w": self.w, "h": self.h}
+
+
+def panel(
+    id: int,
+    title: str,
+    panel_type: PanelType,
+    grid_pos: GridPos,
+    scenario_id: ScenarioId = ScenarioId.RANDOM_WALK,
+) -> dict:
+    """パネルを生成."""
+    return {
+        "id": id,
+        "title": title,
+        "type": panel_type.value,
+        "gridPos": grid_pos.to_dict(),
+        "datasource": {"type": "testdata", "uid": "testdata"},
+        "targets": [{"refId": "A", "scenarioId": scenario_id.value}],
+    }
+
+
+# =============================================================================
+# DataSources
+# =============================================================================
+
+
+def testdata_datasource() -> dict:
+    """TestData データソース."""
     return {
         "name": "TestData",
         "type": "testdata",
@@ -11,24 +82,131 @@ def sample_datasource() -> dict:
     }
 
 
-def sample_dashboard() -> dict:
-    """サンプルダッシュボード定義."""
+def prometheus_datasource(url: str = "http://prometheus:9090") -> dict:
+    """Prometheus データソース."""
+    return {
+        "name": "Prometheus",
+        "type": "prometheus",
+        "access": "proxy",
+        "url": url,
+        "isDefault": False,
+    }
+
+
+def loki_datasource(url: str = "http://loki:3100") -> dict:
+    """Loki データソース."""
+    return {
+        "name": "Loki",
+        "type": "loki",
+        "access": "proxy",
+        "url": url,
+        "isDefault": False,
+    }
+
+
+# デフォルトエイリアス
+sample_datasource = testdata_datasource
+
+
+# =============================================================================
+# Dashboards
+# =============================================================================
+
+
+def dashboard(
+    title: str,
+    panels: list[dict],
+    tags: list[str] | None = None,
+    overwrite: bool = True,
+) -> dict:
+    """ダッシュボードを生成."""
     return {
         "dashboard": {
-            "title": "Sample Dashboard",
-            "tags": ["sample"],
+            "title": title,
+            "tags": tags or [],
             "timezone": "browser",
-            "panels": [
-                {
-                    "id": 1,
-                    "title": "Random Walk",
-                    "type": "timeseries",
-                    "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
-                    "datasource": {"type": "testdata", "uid": "testdata"},
-                    "targets": [{"refId": "A", "scenarioId": "random_walk"}],
-                }
-            ],
+            "panels": panels,
             "schemaVersion": 38,
         },
-        "overwrite": True,
+        "overwrite": overwrite,
     }
+
+
+def simple_dashboard() -> dict:
+    """シンプルなダッシュボード (1パネル)."""
+    return dashboard(
+        title="Simple Dashboard",
+        tags=["simple"],
+        panels=[
+            panel(1, "Random Walk", PanelType.TIMESERIES, GridPos(0, 0, 24, 8)),
+        ],
+    )
+
+
+def metrics_dashboard() -> dict:
+    """メトリクスダッシュボード (複数パネル)."""
+    return dashboard(
+        title="Metrics Dashboard",
+        tags=["metrics", "monitoring"],
+        panels=[
+            panel(1, "Time Series", PanelType.TIMESERIES, GridPos(0, 0, 12, 8)),
+            panel(2, "Current Value", PanelType.STAT, GridPos(12, 0, 6, 4)),
+            panel(3, "Gauge", PanelType.GAUGE, GridPos(18, 0, 6, 4)),
+            panel(4, "Bar Chart", PanelType.BARCHART, GridPos(12, 4, 12, 4)),
+        ],
+    )
+
+
+def logs_dashboard() -> dict:
+    """ログダッシュボード."""
+    return dashboard(
+        title="Logs Dashboard",
+        tags=["logs"],
+        panels=[
+            panel(
+                1, "Log Stream", PanelType.LOGS, GridPos(0, 0, 24, 12),
+                scenario_id=ScenarioId.LOGS,
+            ),
+        ],
+    )
+
+
+def overview_dashboard() -> dict:
+    """オーバービューダッシュボード (6パネル)."""
+    return dashboard(
+        title="Overview Dashboard",
+        tags=["overview", "sample"],
+        panels=[
+            # Row 1
+            panel(1, "Requests/sec", PanelType.STAT, GridPos(0, 0, 6, 4)),
+            panel(2, "Error Rate", PanelType.GAUGE, GridPos(6, 0, 6, 4)),
+            panel(3, "Latency P99", PanelType.STAT, GridPos(12, 0, 6, 4)),
+            panel(4, "Uptime", PanelType.STAT, GridPos(18, 0, 6, 4)),
+            # Row 2
+            panel(5, "Traffic", PanelType.TIMESERIES, GridPos(0, 4, 12, 8)),
+            panel(6, "Distribution", PanelType.PIECHART, GridPos(12, 4, 12, 8)),
+        ],
+    )
+
+
+# デフォルトエイリアス
+sample_dashboard = simple_dashboard
+
+
+# =============================================================================
+# Presets
+# =============================================================================
+
+
+DATASOURCE_PRESETS = {
+    "testdata": testdata_datasource,
+    "prometheus": prometheus_datasource,
+    "loki": loki_datasource,
+}
+
+DASHBOARD_PRESETS = {
+    "simple": simple_dashboard,
+    "metrics": metrics_dashboard,
+    "logs": logs_dashboard,
+    "overview": overview_dashboard,
+}
